@@ -1,0 +1,15 @@
+viz: column chart
+format: stacked, not multi-series mode, data values
+trellis: Yes, split by Aggreg, independent scale
+
+
+index=database sourcetype=create_derived_table host=*.st jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobStartDate=substr(jobStartTime,5,4)
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| chart sum(jobRunTime) as JobRunTime sum(jobNumErrors) as JobNumErrors over jobStartDate by jobType cont=false

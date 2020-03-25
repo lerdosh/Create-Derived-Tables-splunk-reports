@@ -1,0 +1,114 @@
+
+--------------------------------------------------------------------------------
+LERDOSH: need to config myself for git
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+
+git config --global user.email lerdosh@tivo.com 
+git config --global user.name "Larry Erdosh"
+
+--------------------------------------------------------------------------------
+LERDOSH: from home page of new repository:
+
+...or create a new repository on the command line
+
+echo "# Create-Derived-Tables-splunk-reports" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git remote add origin https://github.com/lerdosh/Create-Derived-Tables-splunk-reports.git
+git push -u origin master
+
+--------------------------------------------------------------------------------
+
+$ git config --global --edit
+$ git commit --amend --reset-author
+
+--------------------------------------------------------------------------------
+
+alias config='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
+
+--------------------------------------------------------------------------------
+
+    # ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+
+    Start the ssh-agent in the background.
+
+    $ eval "$(ssh-agent -s)"
+    > Agent pid 59566
+
+    Add your SSH private key to the ssh-agent. If you created your key with a different name, or if you are adding an existing key that has a different name, replace id_rsa in the command with the name of your private key file.
+
+    $ ssh-add ~/.ssh/id_rsa
+
+
+ssh-keygen -t rsa -b 4096 -C lerdosh@tivo.com
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_rsa
+cat ~/.ssh/id_rsa.pub
+
+--------------------------------------------------------------------------------
+
+Switching remote URLs from HTTPS to SSH
+
+    Open Terminal.
+
+    Change the current working directory to your local project.
+
+    List your existing remotes in order to get the name of the remote you want to change.
+
+    $ git remote -v
+    > origin  https://github.com/USERNAME/REPOSITORY.git (fetch)
+    > origin  https://github.com/USERNAME/REPOSITORY.git (push)
+
+    Change your remote's URL from HTTPS to SSH with the git remote set-url command.
+
+    $ git remote set-url origin git@github.com:USERNAME/REPOSITORY.git
+
+    Verify that the remote URL has changed.
+
+    $ git remote -v
+    # Verify new remote URL
+    > origin  git@github.com:USERNAME/REPOSITORY.git (fetch)
+    > origin  git@github.com:USERNAME/REPOSITORY.git (push)
+
+
+git remote -v
+git remote set-url origin git@github.com:lerdosh/Create-Derived-Tables-splunk-reports.git
+
+
+-- BEFORE
+lerdosh@corpbuild30 lerdosh-env30 { /home/lerdosh/personal/splunk }$ git remote -v
+origin	https://github.com/lerdosh/Create-Derived-Tables-splunk-reports.git (fetch)
+origin	https://github.com/lerdosh/Create-Derived-Tables-splunk-reports.git (push)
+
+-- AFTER
+
+lerdosh@corpbuild30 lerdosh-env30 { /home/lerdosh/personal/splunk }$ git remote -v
+origin	git@github.com:lerdosh/Create-Derived-Tables-splunk-reports.git (fetch)
+origin	git@github.com:lerdosh/Create-Derived-Tables-splunk-reports.git (push)
+
+
+-------------------------------------------------------------------------------
+
+lerdosh@corpbuild30 lerdosh-env30 { /home/lerdosh/personal/splunk }$ git remote add origin git@github.com/lerdosh/Create-Derived-Tables-splunk-reports.git 
+
+fatal: remote origin already exists.
+
+lerdosh@corpbuild30 lerdosh-env30 { /home/lerdosh/personal/splunk }$ git push -u origin master
+
+The authenticity of host 'github.com (140.82.113.3)' can't be established.
+RSA key fingerprint is 16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added 'github.com,140.82.113.3' (RSA) to the list of known hosts.
+Counting objects: 3, done.
+Writing objects: 100% (3/3), 250 bytes | 250.00 KiB/s, done.
+Total 3 (delta 0), reused 0 (delta 0)
+To github.com:lerdosh/Create-Derived-Tables-splunk-reports.git
+ * [new branch]      master -> master
+Branch 'master' set up to track remote branch 'master' from 'origin'.
+
+--------------------------------------------------------------------------------
+

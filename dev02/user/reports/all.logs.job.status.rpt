@@ -1,0 +1,35 @@
+viz: column chart
+format: unstacked, not multi-series, no data values
+trellis: split by EnvJob, shared scale
+
+
+
+index=database sourcetype=create_derived_table 
+| rex field=_raw ": Start (?<OrigStartType>\S+)$"
+| rex field=_raw ": End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw ": Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "jobName=(?<NewStartJob>\S+) .* Start Job"
+| rex field=_raw "\S+ \d+ \d+:\d+:\d+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| search OrigJobError=* OR OrigJobTables=* OR OrigStartType=* OR OrigSuccessType=* OR jobEndTime=* OR NewStartJob=*
+| eval Env=case(match(host,".*\.st"),"US Stag",match(host,".*\.sj"),"US Prod",true(),"ENV?") 
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigStartType,OrigTablesType,OrigErrorType,OrigSuccessType)
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","cm",OrigJobType="PgdCollections","pc",true(),"other")
+| eval OrigRowStatus=case(isnotnull(OrigSuccessType),"[any]Success",isnotnull(OrigJobTables),if(isnotnull(OrigJobHasError),"[orig]TablesDoneTokenErr",
+    "[orig]TablesDone"),isnotnull(OrigJobHasError),"[any]QueryError",isnotnull(OrigStartType),"[any]Started")
+| eval NewRowStatus=if(isnotnull(NewStartJob),"[new]Started",if(isnotnull(jobEndTime),if(jobNumErrors>0,"[new]Error","[new]Success"),null()))
+| regex OrigJobTypeShort!="MCA"
+| transaction ProcessId maxspan=8h
+| eval LogFormat=if(mvcount(NewStartJob)>0,"new","old")
+| eval AnyJobName=coalesce(mvindex(jobName,0),OrigJobTypeShort)
+| eval AnyJobType=LogFormat."_".if(mvcount(NewStartJob)>0,jobName,OrigJobType)
+| eval LogDate=strftime(_time, "%F"), LogDateHour=strftime(_time, "%F %T")
+| eval OrigRowStatusMV=case(isnotnull(OrigSuccessType),"[any]Success",isnotnull(OrigJobHasError),if(isnotnull(OrigJobTables),"[orig]TokensErr",
+    "[orig]QueryError"),isnotnull(OrigStartType),"[any]Started")
+| eval NewRowStatusMV=if(isnotnull(jobEndTime),if(jobNumErrors>0,"[new]Error","[new]Success"),null())
+| eval AnyStatus=coalesce(NewRowStatusMV,OrigRowStatusMV)
+| eval EnvJob=printf("%s %s", Env, AnyJobName), JobId=printf("%s %s", EnvJob, LogDateHour)
+| stats first(JobId) as JobId, first(AnyStatus) as JobStatus, first(OrigJobDuration) as SuccessTime, first(OrigTablesDuration) as TablesTime, first(jobTotWaitSecs) as JobWaitTime by EnvJob, LogDateHour

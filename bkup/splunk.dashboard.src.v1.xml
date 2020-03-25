@@ -1,0 +1,655 @@
+<form>
+  <label>Create Derived Tables (DEV)</label>
+  <fieldset submitButton="false">
+    <input type="time" token="timepkr">
+      <label>Time range</label>
+      <default>
+        <earliest>-14d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>New Log Format (M71+) US Staging job times - jobs stacked per day</title>
+      <chart>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=*.st jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobStartDate=substr(jobStartTime,5,4)
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| chart sum(jobRunTime) as JobRunTime sum(jobNumErrors) as JobNumErrors over jobStartDate by jobType cont=false</query>
+          <earliest>$timepkr.earliest$</earliest>
+          <latest>$timepkr.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">-45</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">1</option>
+        <option name="trellis.scales.shared">0</option>
+        <option name="trellis.size">large</option>
+        <option name="trellis.splitBy">_aggregation</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>New Log Format (M71+) US Staging job times - job run times and wait times</title>
+      <chart>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=*.st jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobStartDate=substr(jobStartTime,5,4)
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| chart sum(jobRunTime) as JobRunTime sum(jobWaitTime) as JobWaitTime  over jobStartDate by jobType cont=false</query>
+          <earliest>$timepkr.earliest$</earliest>
+          <latest>$timepkr.latest$</latest>
+        </search>
+                         <!-- Secondary search that drives the annotations -->
+         <search type="annotation">
+           <query>
+           | makeresults | eval _time=relative_time(now(),"-10d@d"), message="Event 1", type="type1" 
+ | append [| makeresults | eval _time=relative_time(now(),"-25d@d"), message="Event 2", type="type1"] 
+ | append [| makeresults | eval _time=relative_time(now(),"-10d@d"), message="Event 3", type="type1"]
+ | append [| makeresults | eval _time=relative_time(now(),"-5d@d"), message="Event 4", type="type1"]
+ | eval annotation_label = message</query>
+         </search>
+         
+         <!-- Customize the event annotation colors based on category name -->
+         <option name="charting.annotation.categoryColors">{"type1":"0xffcc00"}</option>
+
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">top</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>*New Format* Stag and Prod Job Errors</title>
+      <chart>
+        <search>
+          <query>index=database sourcetype=create_derived_table  jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobStartDate=substr(jobStartTime,5,4)
+| eval Env=case(match(host,".*\.st"),"US Stag",match(host,".*\.sj"),"US Prod",true(),"ENV?")
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval JobStartDate=substr(jobStartTime,5,4)
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| chart  sum(jobNumErrors) as JobNumErrors  over JobStartDate by Env</query>
+          <earliest>$timepkr.earliest$</earliest>
+          <latest>$timepkr.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        
+         
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>New Log Format (M71+) US Prod job times - jobs stacked per day (AVAIL after M-71 roll)</title>
+      <chart>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=*.sj jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobStartDate=substr(jobStartTime,5,4)
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| chart sum(jobRunTime) as JobRunTime sum(jobNumErrors) as JobNumErrors  over jobStartDate by jobType cont=false</query>
+          <earliest>$timepkr.earliest$</earliest>
+          <latest>$timepkr.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">-45</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">1</option>
+        <option name="trellis.scales.shared">0</option>
+        <option name="trellis.size">large</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>New Log Format (M71+) US Prod job times - job run times and wait times ( (AVAIL after M-71 roll))</title>
+      <chart>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=*.sj jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobStartDate=substr(jobStartTime,5,4)
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| chart sum(jobRunTime) as JobRunTime sum(jobWaitTime) as JobWaitTime  over jobStartDate by jobType cont=false</query>
+          <earliest>$timepkr.earliest$</earliest>
+          <latest>$timepkr.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">top</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Orig Log Format, US Prod combined population times</title>
+      <chart>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=scdb01.sj
+| rex field=_raw "End (?&lt;OrigSuccessType&gt;\S+)\. Took (?&lt;OrigJobDuration&gt;\d+) seconds"
+| rex field=_raw "Done replacing \( (?&lt;OrigJobTables&gt;.*) \) tables in (?&lt;OrigTablesDuration&gt;\d+) sec"
+| rex field=_raw "(?&lt;OrigJobHasError&gt;errorcode)(?&lt;OrigJobError&gt;.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?&lt;OrigJobErrorNum&gt;\d+).*perl module '(?&lt;OrigErrorType&gt;\S+)':"
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval OrigTableType=case(OrigJobTables="mixContentAttributes","MCA",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigSuccessType,OrigTableType,OrigErrorType)
+| eval HostJob=host."-".OrigJobType."-".tivodate
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) as TotDuration sum(OrigTablesDuration) as TablesDuration count(OrigJobDuration) as NumSucceed count(OrigTablesDuration) as NumOk count(OrigJobHasError) as NumFail values(OrigJobType) by tivodate
+| eval MaxDuration=max(TotDuration,TablesDuration)
+| fields - TotDuration TablesDuration NumSucceed</query>
+          <earliest>$timepkr.earliest$</earliest>
+          <latest>$timepkr.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">0</option>
+        <option name="trellis.size">medium</option>
+        <option name="trellis.splitBy">_aggregation</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Orig Log Format, US Staging combined [Jan 1 - NOW]  (inaccurate after 16-Feb)</title>
+      <chart>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=scdb02.st
+| rex field=_raw "End (?&lt;OrigSuccessType&gt;\S+)\. Took (?&lt;OrigJobDuration&gt;\d+) seconds"
+| rex field=_raw "Done replacing \( (?&lt;OrigJobTables&gt;.*) \) tables in (?&lt;OrigTablesDuration&gt;\d+) sec"
+| rex field=_raw "(?&lt;OrigJobHasError&gt;errorcode)(?&lt;OrigJobError&gt;.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?&lt;OrigJobErrorNum&gt;\d+).*perl module '(?&lt;OrigErrorType&gt;\S+)':"
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval OrigTableType=case(OrigJobTables="mixContentAttributes","MCA",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigSuccessType,OrigTableType,OrigErrorType)
+| eval HostJob=host."-".OrigJobType."-".tivodate, LogTime=strftime(_time, "%F")
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) as TotDuration sum(OrigTablesDuration) as TablesDuration count(OrigJobDuration) as NumSucceed count(OrigTablesDuration) as NumOk count(OrigJobHasError) as NumFail values(OrigJobType) by tivodate
+| eval MaxDuration=max(TotDuration,TablesDuration)
+| fields - TotDuration TablesDuration NumSucceed</query>
+          <earliest>1577865600</earliest>
+          <latest>1584169200</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">0</option>
+        <option name="trellis.size">medium</option>
+        <option name="trellis.splitBy">_aggregation</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>*Orig Format* Number of Job Errors by Tivodate, Host</title>
+      <chart>
+        <search>
+          <query>index=database sourcetype=create_derived_table
+| rex field=_raw "End (?&lt;OrigSuccessType&gt;\S+)\. Took (?&lt;OrigJobDuration&gt;\d+) seconds"
+| rex field=_raw "Done replacing \( (?&lt;OrigJobTables&gt;.*) \) tables in (?&lt;OrigTablesDuration&gt;\d+) sec"
+| rex field=_raw "(?&lt;OrigJobHasError&gt;errorcode)(?&lt;OrigJobError&gt;.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?&lt;OrigJobErrorNum&gt;\d+).*perl module '(?&lt;OrigErrorType&gt;\S+)':"
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigSuccessType,OrigTablesType,OrigErrorType)
+| eval LogDate=strftime(_time, "%F")
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","CM",OrigJobType="PgdCollections","PC",true(),"other")
+| eval HostJob=printf("%s-%s-%s",host, OrigJobTypeShort, tivodate)
+| regex OrigJobTypeShort="CM|PC|MCA"
+| chart count(OrigJobHasError) as NumErrors by tivodate, host</query>
+          <earliest>1577865600</earliest>
+          <latest>1584169200</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">-45</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">zero</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">1</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">seriesCompare</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">large</option>
+        <option name="trellis.splitBy">host</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>*new format* US Stag - completed jobs</title>
+      <table>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=*.st jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| table jobId  jobType jobStatus jobStartTime jobEndTime jobRunTime jobTotDuration  jobWaitTime jobNumErrors jobNumWarns
+| sort -jobStartTime</query>
+          <earliest>$timepkr.earliest$</earliest>
+          <latest>$timepkr.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>*new* Us Staging - individual query status - last 3 days - grouped by job</title>
+      <table>
+        <title>US Staging - new format - completed stages - all times UTC</title>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=*.st stageEndTime OR jobEndTime
+| rename stageTotRunTimeSecs as stageRunTime
+| rename stageTotWaitSecs as stageWaitTime
+| rename stageDuration as stageTotDuration
+| rename stageState as stageStatus
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| table jobId jobType jobStartTime jobEndTime jobStatus jobRunTime jobTotDuration jobWaitTime  stageName stageStatus stageStartTime stageEndTime stageRunTime stageTotDuration  stageWaitTime stageNumErrors stageNumWarns
+| sort -jobStartTime stageStartTime stageName</query>
+          <earliest>-3d</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">preview</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>*new* Us Staging - individual query SUBSET status - last 3 days - grouped by job and stage</title>
+      <table>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=*.st stageEndTime OR jobEndTime OR queryEndTime
+
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+
+| rename stageTotRunTimeSecs as stageRunTime
+| rename stageTotWaitSecs as stageWaitTime
+| rename stageDuration as stageTotDuration
+| rename stageState as stageStatus
+
+| rename queryTotRunTimeSecs as queryRunTime
+| rename queryTotWaitSecs as queryWaitTime
+| rename queryDuration as queryTotDuration
+| rename queryState as queryStatus
+| eval taskDuration=coalesce(jobRunTime,stageRunTime,queryTotDuration)
+| table jobId taskDuration jobType jobStartTime jobEndTime jobStatus jobRunTime jobTotDuration jobWaitTime  stageRunTime stageTotDuration stageName stageStatus stageStartTime stageEndTime  stageWaitTime  queryTotDuration queryName queryStatus queryStartTime queryEndTime
+
+| sort -jobStartTime stageStartTime stageEndTime stageName queryStartTime queryEndTime queryName</query>
+          <earliest>-3d</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>*new* Us Staging - individual query SUBSET status - last 3 days - in order of run (FOR PARALLEL MODE)</title>
+      <table>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=*.st stageEndTime OR jobEndTime OR queryEndTime
+
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+
+| rename stageTotRunTimeSecs as stageRunTime
+| rename stageTotWaitSecs as stageWaitTime
+| rename stageDuration as stageTotDuration
+| rename stageState as stageStatus
+
+| rename queryTotRunTimeSecs as queryRunTime
+| rename queryTotWaitSecs as queryWaitTime
+| rename queryDuration as queryTotDuration
+| rename queryState as queryStatus
+| eval taskDuration=coalesce(jobRunTime,stageRunTime,queryTotDuration)
+| table jobId taskDuration jobType jobStartTime jobEndTime jobStatus jobRunTime jobTotDuration jobWaitTime  stageRunTime stageTotDuration stageName stageStatus stageStartTime stageEndTime  stageWaitTime  queryTotDuration queryName queryStatus queryStartTime queryEndTime
+
+| sort -jobStartTime queryStartTime queryEndTime queryName</query>
+          <earliest>-3d</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Orig Log Format, US Prod summary by TivoDate</title>
+      <table>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=*.sj
+| rex field=_raw "End (?&lt;OrigSuccessType&gt;\S+)\. Took (?&lt;OrigJobDuration&gt;\d+) seconds"
+| rex field=_raw "Done replacing \( (?&lt;OrigJobTables&gt;.*) \) tables in (?&lt;OrigTablesDuration&gt;\d+) sec"
+| rex field=_raw "(?&lt;OrigJobHasError&gt;errorcode)(?&lt;OrigJobError&gt;.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?&lt;OrigJobErrorNum&gt;\d+).*perl module '(?&lt;OrigErrorType&gt;\S+)':"
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval OrigTableType=case(OrigJobTables="mixContentAttributes","MCA",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigSuccessType,OrigTableType,OrigErrorType)
+| eval HostJob=host."-".OrigJobType."-".tivodate
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) as TotDuration sum(OrigTablesDuration) as TablesDuration count(OrigJobDuration) as NumSucceed count(OrigTablesDuration) as NumOk count(OrigJobHasError) as NumFail values(OrigJobType) by tivodate
+| eval MaxDuration=max(TotDuration,TablesDuration)
+| fields - TotDuration TablesDuration NumSucceed
+| sort -tivodate</query>
+          <earliest>$timepkr.earliest$</earliest>
+          <latest>$timepkr.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">cell</option>
+        <option name="percentagesRow">false</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Orig Log Format, US Stag summary by TivoDate (not accurate after 16-Feb)</title>
+      <table>
+        <search>
+          <query>index=database sourcetype=create_derived_table host=*.st
+| rex field=_raw "End (?&lt;OrigSuccessType&gt;\S+)\. Took (?&lt;OrigJobDuration&gt;\d+) seconds"
+| rex field=_raw "Done replacing \( (?&lt;OrigJobTables&gt;.*) \) tables in (?&lt;OrigTablesDuration&gt;\d+) sec"
+| rex field=_raw "(?&lt;OrigJobHasError&gt;errorcode)(?&lt;OrigJobError&gt;.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?&lt;OrigJobErrorNum&gt;\d+).*perl module '(?&lt;OrigErrorType&gt;\S+)':"
+| rex field=source "-(?&lt;tivodate&gt;\d+)\.log"
+| eval OrigTableType=case(OrigJobTables="mixContentAttributes","MCA",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigSuccessType,OrigTableType,OrigErrorType)
+| eval HostJob=host."-".OrigJobType."-".tivodate
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) as TotDuration sum(OrigTablesDuration) as TablesDuration count(OrigJobDuration) as NumSucceed count(OrigTablesDuration) as NumOk count(OrigJobHasError) as NumFail values(OrigJobType) by tivodate
+| eval MaxDuration=max(TotDuration,TablesDuration)
+| fields - TotDuration TablesDuration NumSucceed
+| sort -tivodate</query>
+          <earliest>1577865600</earliest>
+          <latest>1584169200</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Orig Log Format, Success or Error, US Prod and US Stag</title>
+      <table>
+        <title>US Prod, US Stag individual jobs</title>
+        <search>
+          <query>index=database sourcetype=create_derived_table 
+| rex field=_raw "End (?&lt;OrigJobType&gt;\S+)\. Took (?&lt;OrigJobDuration&gt;\d+) seconds" 
+| rex field=_raw "(?&lt;OrigJobHasError&gt;errorcode)(?&lt;OrigJobError&gt;.*)" 
+| search OrigJobType=currentMix OR OrigJobType=pgdCollections OR OrigJobHasError=errorcode
+| sort host, -_time
+| table host _time Orig*</query>
+          <earliest>$timepkr.earliest$</earliest>
+          <latest>$timepkr.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+</form>

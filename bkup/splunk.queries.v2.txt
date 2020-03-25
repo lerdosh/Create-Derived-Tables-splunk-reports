@@ -1,0 +1,298 @@
+ index=database sourcetype=create_derived_table errorcode | rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"  | rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"  | rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':" | search OrigJobType=currentMix OR OrigJobType=pgdCollections OR OrigJobError  OrigJobError="*"  OrigJobError="*" | eval HostJob=host."-".OrigJobType
+
+index=database sourcetype=create_derived_table  | rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"  | rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"  | rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':"
+| eval HostJob=host."-".OrigJobType
+| search OrigJobType="*"
+| table  host OrigJobType OrigJobDuration OrigJobErrorNum
+
+index=database sourcetype=create_derived_table host=scdb01.sj | rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"  | rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"  | rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval HostJob=host."-".OrigJobType
+| regex OrigJobType="CurrentMix|PgdCollections"
+| table  tivodate host OrigJobType OrigJobDuration OrigJobErrorNum
+
+
+index=database sourcetype=create_derived_table host=scdb01.sj | rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"  | rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"  | rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval HostJob=host."-".OrigJobType
+| regex OrigJobType="CurrentMix|PgdCollections"
+| table OrigJobDuration tiovdate
+
+index=database sourcetype=create_derived_table host=scdb01.sj | rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"  | rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"  | rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval HostJob=host."-".OrigJobType
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) by tivodate
+
+* good: tivodate, sum(duration), count(success), count(failure)
+
+index=database sourcetype=create_derived_table host=scdb01.sj | rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"  | rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"  | rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval HostJob=host."-".OrigJobType
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) count(OrigJobDuration) count(OrigJobHasError) by tivodate
+
+* good, show different values in separate graphs
+
+index=database sourcetype=create_derived_table host=scdb01.sj | rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"  | rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"  | rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval HostJob=host."-".OrigJobType
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) as DailySuccessDuration count(OrigJobDuration) as NumSuccess count(OrigJobHasError) as NumFail by tivodate
+
+
+index=database sourcetype=create_derived_table
+| replace *.tivo.com with * in host
+| stats values(host) as Host
+
+
+* draft 1 for DoneTables
+
+index=database sourcetype=create_derived_table host=scdb01.sj
+| rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_row "Done replacing \( (?<OrigJobTables>.*) \) in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval HostJob=host."-".OrigJobType
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) as DailySuccessDuration count(OrigJobDuration) as NumSuccess  by tivodate
+
+
+index=database sourcetype=create_derived_table host=scdb01.sj
+| rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw "Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| eval OrigJobType=case(OrigJobTables="mixContentAttributes" OR OrigJobTables="currentMix",OrigJobTables,match(OrigJobTables,"pgdColl"),"pgdCollections")
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval HostJob=host."-".OrigJobType."-".tivodate
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(coalesce(OrigJobDuration,OrigTablesDuration)) as DailySuccessDuration count(OrigJobDuration) as NumSuccess count(OrigTablesDuration) as NumTablesDone count(OrigJobHasError) as NumFail by tivodate
+
+
+** good, get JobDone, TablesDone, Error
+
+index=database sourcetype=create_derived_table host=scdb01.sj
+| rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw "Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| eval OrigJobType=case(OrigJobTables="mixContentAttributes","MCA",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections",true(),OrigJobType)
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval HostJob=host."-".OrigJobType."-".tivodate
+| regex OrigJobType="CurrentMix|PgdCollections"
+
+
+** good above, with stats
+
+index=database sourcetype=create_derived_table host=scdb01.sj
+| rex field=_raw "End (?<OrigJobType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw "Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| eval OrigJobType=case(OrigJobTables="mixContentAttributes","MCA",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections",true(),OrigJobType)
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigJobType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval HostJob=host."-".OrigJobType."-".tivodate
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) as SuccessDuration sum(OrigTablesDuration) as TablesDuration count(OrigJobDuration) as NumSucceed count(OrigTablesDuration) as NumOk count(OrigJobHasError) as NumFail by tivodate
+
+** good, show jobs run, sorted desc tivodate
+
+index=database sourcetype=create_derived_table host=scdb01.sj
+| rex field=_raw "End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw "Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTableType=case(OrigJobTables="mixContentAttributes","MCA",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigSuccessType,OrigTableType,OrigErrorType)
+| eval HostJob=host."-".OrigJobType."-".tivodate
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) as TotDuration sum(OrigTablesDuration) as TablesDuration count(OrigJobDuration) as NumSucceed count(OrigTablesDuration) as NumOk count(OrigJobHasError) as NumFail values(OrigJobType) by tivodate
+| sort -tivodate
+
+* might be the same - or in progress
+
+index=database sourcetype=create_derived_table host=scdb02.st
+| rex field=_raw "End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw "Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTableType = case(OrigJobTables="mixContentAttributes","MCA",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType = coalesce(OrigSuccessType,OrigTableType,OrigErrorType)
+| eval HostJob = host."-".OrigJobType."-".tivodate
+| regex OrigJobType = "CurrentMix|PgdCollections"
+| stats sum(OrigJobDuration) as TotDuration sum(OrigTablesDuration) as TablesDuration count(OrigJobDuration) as NumSucceed count(OrigTablesDuration) as NumOk count(OrigJobHasError) as NumFail values(OrigJobType) by tivodate
+
+* new or old?  show each job duration or error
+
+
+* show uniq hosts
+
+index=database sourcetype=create_derived_table
+| replace *.tivo.com with * in host
+| stats values(host) as Host
+
+
+
+* add Date
+
+index=database sourcetype=create_derived_table host=scdb01.sj
+| rex field=_raw "End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw "Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTableType=case(OrigJobTables="mixContentAttributes","MCA",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigSuccessType,OrigTableType,OrigErrorType)
+| eval HostJob=host."-".OrigJobType."-".tivodate, LogTime=strftime(_time, "%F")
+| regex OrigJobType="CurrentMix|PgdCollections"
+| stats max(LogTime) as LogTime sum(OrigJobDuration) as TotDuration sum(OrigTablesDuration) as TablesDuration count(OrigJobDuration) as NumSucceed count(OrigTablesDuration) as NumOk count(OrigJobHasError) as NumFail values(OrigJobType)  by tivodate
+| eval MaxDuration=max(TotDuration,TablesDuration)
+| fields - TotDuration TablesDuration NumSucceed
+
+
+* good, panel, completed job state
+
+index=database sourcetype=create_derived_table host=*.st jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as JobTotDuration
+| rename jobState as JobStatus
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval jobId=printf("%s.%d.%02d",jobName,tivodate,date_hour)
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| table jobId  jobType jobStatus jobStartTime jobEndTime jobRunTime jobTotDuration  jobWaitTime jobNumErrors jobNumWarns
+| sort -jobStartTime
+
+
+* good, stage state
+
+index=database sourcetype=create_derived_table host=*.st stageEndTime OR jobEndTime
+| rename stageTotRunTimeSecs as stageRunTime
+| rename stageTotWaitSecs as stageWaitTime
+| rename stageDuration as StageTotDuration
+| rename stageState as StageStatus
+| rex field=source "-(?<tivodate>\d+)\.log"
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as JobTotDuration
+| rename jobState as JobStatus
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| eval jobId=printf("%s.%d.%02d",jobName,tivodate,date_hour)
+| table jobId jobType jobStartTime jobEndTime jobWaitTime  stageName stageStatus stageStartTime stageEndTime stageRunTime stageTotDuration  stageWaitTime stageNumErrors stageNumWarns
+| sort -jobStartTime stageStartTime stageName
+
+* proto, chart, job run times
+
+index=database sourcetype=create_derived_table host=*.st jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobStartDate=substr(jobStartTime,5,4)
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| chart sum(jobRunTime) as JobRunTime sum(jobWaitTime) as JobWaitTime over jobStartDate by jobType cont=false
+
+
+* proto, (unverified), show tasks in order started (** can probably just use _time **)
+
+index=database sourcetype=create_derived_table host=*.st stageEndTime OR jobEndTime OR queryEndTime jobName=pc source=*18336* OR source=*189335* | rex field=source "-(?<tivodate>\d+)\.log"
+| rename jobTotRunTimeSecs as jobRunTime | rename jobTotWaitSecs as jobWaitTime | rename jobDuration as jobTotDuration | rename jobState as jobStatus
+| rename stageTotRunTimeSecs as stageRunTime | rename stageTotWaitSecs as stageWaitTime | rename stageDuration as stageTotDuration | rename stageState as stageStatus
+| rename queryTotRunTimeSecs as queryRunTime | rename queryTotWaitSecs as queryWaitTime | rename queryDuration as queryTotDuration | rename queryState as queryStatus
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix"), jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval taskDuration=coalesce(queryTotDuration,stageRunTime,jobRunTime), taskName=coalesce(queryName,stageName,jobName), taskEndTime=coalesce(queryEndTime, stageEndTime, jobEndTime), taskType=case(!isnull(queryName),"3.query",!isnull(stageName),"2.stage",true(),"1.job"), taskStartTime=coalesce(queryStartTime, stageStartTime, jobStartTime)
+| eval taskSortTime=coalesce(queryStartTime,stageEndTime,stageStartTime,jobEndTime,jobStartTime)
+| table jobId taskDuration taskName taskSortTime taskStartTime taskEndTime taskType jobType jobStartTime jobEndTime jobStatus jobRunTime jobTotDuration jobWaitTime  stageRunTime stageTotDuration stageName stageStatus stageStartTime stageEndTime  stageWaitTime  queryTotDuration queryName queryStatus queryStartTime queryEndTime
+| sort -jobStartTime taskSortTime -taskType taskEndTime queryName
+
+
+
+
+| makeresults | eval _time=relative_time(now(),"-10d@d"), message="Event 1", type="type1" 
+ | append [| makeresults | eval _time=relative_time(now(),"-25d@d"), message="Event 2", type="type1"] 
+ | append [| makeresults | eval _time=relative_time(now(),"-10d@d"), message="Event 3", type="type1"]
+ | append [| makeresults | eval _time=relative_time(now(),"-5d@d"), message="Event 4", type="type1"]
+ | eval annotation_label = message
+
+index=database sourcetype=create_derived_table  jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval Env=case(match(host,".*\.st"),"US_Stag",match(host,".*\.sj"),"US_Prod",true(),"ENV?") 
+| eval jobEnv=printf("%s.%s", Env, jobName)
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| sort -tivodate
+| stats first(tivodate), first(jobNumErrors), first(jobRunTime) by jobEnv
+
+
+index=database sourcetype=create_derived_table  jobEndTime  jobName=pc host=*.st
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval Env=case(match(host,".*\.st"),"US_Stag",match(host,".*\.sj"),"US_Prod",true(),"ENV?") 
+| eval jobEnv=printf("%s.%s", Env, jobName)
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+ | eval string_dur = tostring(round(jobRunTime), "duration") 
+ | eval formatted_dur = replace(string_dur,"(?:(\d+)\+)?0?(\d+):0?(\d+):0?(\d+)","\1d \2h \3m \4s")
+ | eval jobRunTimeStr=replace(formatted_dur, "^d (0h (0m )?)?","") 
+| eval Status=printf("%s-%d", if(jobNumErrors>0,"FAIL","SUCCESS"), jobRunTimeStr)
+| sort -tivodate
+| stats first(Status)
+
+index=database sourcetype=create_derived_table  jobEndTime  jobName=pc host=*.st
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval Env=case(match(host,".*\.st"),"US_Stag",match(host,".*\.sj"),"US_Prod",true(),"ENV?") 
+| eval jobEnv=printf("%s.%s", Env, jobName)
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| eval string_dur = tostring(round(jobRunTime), "duration") 
+| eval formatted_dur = replace(string_dur,"(?:(\d+)\+)?0?(\d+):0?(\d+):0?(\d+)","\1d \2h \3m \4s")
+| eval jobRunTimeStr=replace(formatted_dur, "^d (0h (0m )?)?","") 
+| eval Status=printf("%s: %s", if(jobNumErrors>0,"FAIL","SUCCESS"), jobRunTimeStr)
+| sort -tivodate
+| stats first(Status)
+
+index=database sourcetype=create_derived_table  jobEndTime 
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval Env=case(match(host,".*\.st"),"US_Stag",match(host,".*\.sj"),"US_Prod",true(),"ENV?") 
+| eval jobEnv=printf("%s.%s", Env, jobName)
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| eval string_dur = tostring(round(jobRunTime), "duration") 
+| eval formatted_dur = replace(string_dur,"(?:(\d+)\+)?0?(\d+):0?(\d+):0?(\d+)","\1d \2h \3m \4s")
+| eval jobRunTimeStr=replace(formatted_dur, "^d (0h (0m )?)?","") 
+| eval Status=printf("%s: %s", if(jobNumErrors>0,"FAIL","SUCCESS"), jobRunTimeStr)
+| sort -tivodate
+| stats first(jobRunTime), first(Status) by jobEnv
+
+
+index=database sourcetype=create_derived_table  jobEndTime host=*.st jobName=pc
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval Env=case(match(host,".*\.st"),"US_Stag",match(host,".*\.sj"),"US_Prod",true(),"ENV?") 
+| eval jobEnv=printf("%s.%s", Env, jobName)
+| sort -tivodate
+| stats first(jobRunTime) by jobEnv

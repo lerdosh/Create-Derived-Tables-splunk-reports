@@ -1,0 +1,17 @@
+viz: column chart
+format: unstacked, not multi-series mode, no data values
+trellis: no
+
+
+index=database sourcetype=create_derived_table  jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobStartDate=substr(jobStartTime,5,4)
+| eval Env=case(match(host,".*\.st"),"US Stag",match(host,".*\.sj"),"US Prod",true(),"ENV?")
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval JobStartDate=substr(jobStartTime,5,4)
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| chart  sum(jobNumErrors) as JobNumErrors  over JobStartDate by Env

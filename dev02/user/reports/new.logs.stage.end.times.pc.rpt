@@ -1,0 +1,16 @@
+viz: none
+
+index=database sourcetype=create_derived_table host=*.sj stageEndTime OR jobEndTime jobName=pc
+| rename stageTotRunTimeSecs as stageRunTime
+| rename stageTotWaitSecs as stageWaitTime
+| rename stageDuration as stageTotDuration
+| rename stageState as stageStatus
+| rex field=source "-(?<tivodate>\d+)\.log"
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| eval jobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| table host jobId jobType jobStartTime jobEndTime jobStatus jobRunTime jobTotDuration jobWaitTime  stageName stageStatus stageStartTime stageEndTime stageRunTime stageTotDuration  stageWaitTime stageNumErrors stageNumWarns
+| sort -jobStartTime stageStartTime stageName

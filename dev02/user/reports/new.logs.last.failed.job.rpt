@@ -1,0 +1,23 @@
+viz: single
+format: none
+trellis: Yes, split by JobEnv
+
+index=database sourcetype=create_derived_table  jobEndTime  jobNumErrors>0 
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| rex field=source "-(?<tivodate>\d+)\.log"
+| append [| gentimes start=-999 end=-998 | eval jobStartDate="NO M71+ FAILS IN TIME RANGE", host="x.st", jobName="pc" ]
+| append [| gentimes start=-999 end=-998 | eval jobStartDate="NO M71+ FAILS IN TIME RANGE", host="x.st", jobName="cm" ]
+| append [| gentimes start=-999 end=-998 | eval jobStartDate="NO M71+ FAILS IN TIME RANGE", host="x.sj", jobName="pc" ]
+| append [| gentimes start=-999 end=-998 | eval jobStartDate="NO M71+ FAILS IN TIME RANGE", host="x.sj", jobName="cm" ]
+| eval jobStartDay=if(isnull(jobStartTime),null(),printf("%s-%s-%s",substr(jobStartTime,1,4),substr(jobStartTime,5,2),substr(jobStartTime,7,2)))
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval JobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| eval jobRunTime=if(jobNumErrors>0,-jobRunTime,jobRunTime)
+| eval Env=case(match(host,".*\.st"),"US Stag",match(host,".*\.sj"),"US Prod",true(),"ENV?") 
+| eval JobEnv=printf("%s %s", Env, JobType)
+| sort -_time
+| stats first(jobStartDay) as LastJobFailed by JobEnv
+| eval LastJobFailed=if(isnull(LastJobFailed),"none",LastJobFailed)

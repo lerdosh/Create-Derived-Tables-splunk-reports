@@ -1,0 +1,22 @@
+vis: column chart
+format: unstacked, multi-series mode
+trellis: no
+
+
+
+
+index=database sourcetype=create_derived_table 
+| rex field=_raw "End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw "Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval Env=case(match(host,".*\.st"),"US_Stag",match(host,".*\.sj"),"US_Prod",true(),"ENV?") 
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigSuccessType,OrigTablesType,OrigErrorType)
+| eval LogDate=strftime(_time, "%F")
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","CM",OrigJobType="PgdCollections","PC",true(),"other")
+| eval HostJob=printf("%s %s",Env, OrigJobType)
+| eval HostJobDate=printf("%s @%d", HostJob, tivodate)
+| regex OrigJobTypeShort="CM|PC|MCA"
+| chart count(OrigJobHasError) as NumErrors over tivodate  by HostJob

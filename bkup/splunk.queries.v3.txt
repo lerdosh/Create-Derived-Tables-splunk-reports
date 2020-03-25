@@ -1,0 +1,241 @@
+** proto, transaction works
+
+index=database sourcetype=create_derived_table host=*.sj
+| rex field=_raw "End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw "Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "\S+ \d+ \S+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigTablesType,OrigErrorType)
+| eval LogDate=strftime(_time, "%F %H")
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","CM",OrigJobType="PgdCollections","PC",true(),"other")
+| regex OrigJobTypeShort="PC"
+| eval tivodate=if(isnotnull(OrigTablesType),tivodate." (only tokens failed)",tivodate)
+| transaction ProcessId maxspan=2h
+| table ProcessId eventcount duration tivodate _raw
+
+index=database sourcetype=create_derived_table host=*.sj
+| rex field=_raw ": Start (?<OrigStartType>\S+)$"
+| rex field=_raw "Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "\S+ \d+ \S+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigStartType,OrigTablesType,OrigErrorType)
+| eval LogDate=strftime(_time, "%F %H")
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","CM",OrigJobType="PgdCollections","PC",true(),"other")
+| regex OrigJobTypeShort="PC"
+| eval tivodate=if(isnotnull(OrigTablesType),tivodate." (only tokens failed)",tivodate)
+| transaction ProcessId maxspan=8h
+| table eventcount duration tivodate ProcessId OrigTablesType OrigJobTypeShort _raw
+
+
+** good transaction, start, tables, error, end
+
+index=database sourcetype=create_derived_table host=*.sj
+| rex field=_raw ": Start (?<OrigStartType>\S+)$"
+| rex field=_raw ": End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw ": Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "\S+ \d+ \d+:\d+:\d+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| search OrigJobError=* OR OrigJobTables=* OR OrigStartType=* OR OrigSuccessType=*
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigStartType,OrigTablesType,OrigErrorType)
+| eval LogDate=strftime(_time, "%F %H")
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","CM",OrigJobType="PgdCollections","PC",true(),"other")
+| eval tivodate=if(isnotnull(OrigTablesType),tivodate." (only tokens failed)",tivodate)
+| transaction ProcessId maxspan=8h
+| table eventcount duration _time tivodate ProcessId OrigTablesType OrigJobTypeShort _raw
+| sort -_time
+
+
+** good transaction, including new format
+
+index=database sourcetype=create_derived_table host=*.st
+| rex field=_raw ": Start (?<OrigStartType>\S+)$"
+| rex field=_raw ": End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw ": Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "\S+ \d+ \d+:\d+:\d+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| search OrigJobError=* OR OrigJobTables=* OR OrigStartType=* OR OrigSuccessType=* OR jobEndTime=*
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigStartType,OrigTablesType,OrigErrorType,OrigSuccessType)
+| eval OrigStatus=case(isnotnull(OrigSuccessType),"Success",isnotnull(OrigJobHasError),if(isnotnull(OrigJobTables),"Tokens Error","Query Error"),true(),"PENDING")
+| eval NewStatus=case(isnull(jobEndTime),null(),jobNumErrors>0,"[new]Error",true(),"[new]Success")
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","mca",OrigJobType="CurrentMix","cm",OrigJobType="PgdCollections","pc",true(),"other")
+| eval LogDate=strftime(_time, "%F %H")
+| eval CombStatus=coalesce(NewStatus,OrigStatus)
+| transaction ProcessId maxspan=8h
+| table eventcount duration _time tivodate ProcessId jobEndTime jobNumErrors CombStatus NewStatus OrigStatus OrigTablesType OrigJobType OrigJobTypeShort _raw
+| sort -_time
+
+** proto
+
+index=database sourcetype=create_derived_table host=*.st
+| rex field=_raw ": Start (?<OrigStartType>\S+)$"
+| rex field=_raw ": End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw ": Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "\S+ \d+ \d+:\d+:\d+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| search OrigJobError=* OR OrigJobTables=* OR OrigStartType=* OR OrigSuccessType=* OR jobEndTime=*
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigStartType,OrigTablesType,OrigErrorType,OrigSuccessType)
+| eval OrigStatus=case(isnotnull(OrigSuccessType),"Success",isnotnull(OrigJobHasError),if(isnotnull(OrigJobTables),"Tokens Error","Query Error"),true(),"PENDING")
+| eval NewStatus=case(isnull(jobEndTime),null(),jobNumErrors>0,"[new]Error",true(),"[new]Success")
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","CM",OrigJobType="PgdCollections","PC",true(),"other")
+| eval LogDate=strftime(_time, "%F %H")
+| eval JoinStatus=coalesce(NewStatus,OrigStatus)
+| regex OrigJobTypeShort="CM|PC"
+| transaction ProcessId maxspan=8h
+| eval LastStatus="tbd"
+| table eventcount duration _time tivodate ProcessId jobEndTime jobNumErrors LastStatus JoinStatus NewStatus OrigStatus OrigTablesType OrigJobType OrigJobTypeShort _raw
+| sort -_time
+
+
+** proto
+
+index=database sourcetype=create_derived_table host=*.st
+| rex field=_raw ": Start (?<OrigStartType>\S+)$"
+| rex field=_raw ": End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw ": Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "\S+ \d+ \d+:\d+:\d+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| search OrigJobError=* OR OrigJobTables=* OR OrigStartType=* OR OrigSuccessType=* OR jobEndTime=*
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigStartType,OrigTablesType,OrigErrorType,OrigSuccessType)
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","CM",OrigJobType="PgdCollections","PC",true(),"other")
+| eval OrigStatus=case(isnotnull(OrigSuccessType),"Success",isnotnull(OrigJobTables),"[orig]TablesDone",isnotnull(OrigJobHasError),"Error",true(),"Started")
+| eval NewStatus=case(isnull(jobEndTime),"[new]None",jobNumErrors>0,"[new]Error",true(),"[new]Success")
+| eval LogDate=strftime(_time, "%F %H")
+| eval JoinStatus=coalesce(NewStatus,OrigStatus)
+| regex OrigJobTypeShort="CM|PC"
+| transaction ProcessId maxspan=8h
+| eval status1=mvindex(JoinStatus,-1)
+| table eventcount duration _time host tivodate ProcessId status1 jobEndTime jobNumErrors LastStatus JoinStatus NewStatus OrigStatus OrigTablesType OrigJobType OrigJobTypeShort _raw
+| sort -_time
+
+** proto
+
+index=database sourcetype=create_derived_table 
+| rex field=_raw ": Start (?<OrigStartType>\S+)$"
+| rex field=_raw ": End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw ": Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "jobName=(?<NewJobType>\S+) .* Start Job"
+| rex field=_raw "\S+ \d+ \d+:\d+:\d+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| search OrigJobError=* OR OrigJobTables=* OR OrigStartType=* OR OrigSuccessType=* OR jobEndTime=* OR NewJobType=*
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigStartType,OrigTablesType,OrigErrorType,OrigSuccessType)
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","CM",OrigJobType="PgdCollections","PC",true(),"other")
+| eval OrigRowStatus=case(isnotnull(OrigSuccessType),"[any]Success",isnotnull(OrigJobTables),"[orig]TablesDone",isnotnull(OrigJobHasError),"[any]Error",isnotnull(OrigStartType),"[any]Started")
+| eval NewRowStatus=if(isnotnull(NewJobType),"[new]Started",if(isnotnull(jobEndTime),if(jobNumErrors>0,"[new]Error","[new]Success")),null())
+| eval AnyStatus=coalesce(NewRowStatus,OrigRowStatus)
+| eval LogDate=strftime(_time, "%F %H")
+| regex OrigJobTypeShort!="MCA"
+| transaction ProcessId maxspan=8h
+| eval JoinStatus=if(isnotnull(mvcount(jobEndTime)),if(jobNumErrors>0,"[new]Error","[new]Success"),case(isnotnull(mvcount(OrigJobTables)),
+| table eventcount duration _time host tivodate ProcessId jobEndTime jobNumErrors AnyStatus
+| sort -_time
+
+** proto, better?
+
+index=database sourcetype=create_derived_table 
+| rex field=_raw ": Start (?<OrigStartType>\S+)$"
+| rex field=_raw ": End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw ": Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "jobName=(?<NewJobType>\S+) .* Start Job"
+| rex field=_raw "\S+ \d+ \d+:\d+:\d+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| search OrigJobError=* OR OrigJobTables=* OR OrigStartType=* OR OrigSuccessType=* OR jobEndTime=* OR NewJobType=*
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigStartType,OrigTablesType,OrigErrorType,OrigSuccessType)
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","CM",OrigJobType="PgdCollections","PC",true(),"other")
+| eval OrigRowStatus=case(isnotnull(OrigSuccessType),"[any]Success",isnotnull(OrigJobTables),if(isnotnull(OrigJobHasError),"[orig]TablesDoneTokenErr",
+    "[orig]TablesDone"),isnotnull(OrigJobHasError),"[any]QueryError",isnotnull(OrigStartType),"[any]Started")
+| eval NewRowStatus=if(isnotnull(NewJobType),"[new]Started",if(isnotnull(jobEndTime),if(jobNumErrors>0,"[new]Error","[new]Success"),null()))
+| eval LogDate=strftime(_time, "%F %H")
+| regex OrigJobTypeShort!="MCA"
+| transaction ProcessId maxspan=8h
+| eval OrigRowStatusMV=case(isnotnull(OrigSuccessType),"[any]Success",isnotnull(OrigJobHasError),if(isnotnull(OrigJobTables),"[orig]TokensErr",
+    "[orig]QueryError"),isnotnull(OrigStartType),"[any]Started")
+| eval NewRowStatusMV=if(isnotnull(jobEndTime),if(jobNumErrors>0,"[new]Error","[new]Success"),null())
+| eval AnyStatus=coalesce(NewRowStatusMV,OrigRowStatusMV)
+| eval JobStatus=if(isnotnull(jobEndTime),if(jobNumErrors>0,"[new]Error","[new]Success"),case(isnotnull(OrigSuccessType),"[any]Success",isnotnull(OrigJobTables),"[orig]TablesDone",isnotnull(OrigJobHasError),"[any]Error",isnotnull(OrigStartType),"[any]Started"))
+| table eventcount duration _time host tivodate ProcessId JobStatus jobEndTime jobNumErrors AnyStatus NewRowStatusMV OrigRowStatusMV NewRowStatus OrigRowStatus
+| sort -_time
+
+
+** good?
+
+index=database sourcetype=create_derived_table 
+| rex field=_raw ": Start (?<OrigStartType>\S+)$"
+| rex field=_raw ": End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw ": Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "jobName=(?<NewJobType>\S+) .* Start Job"
+| rex field=_raw "\S+ \d+ \d+:\d+:\d+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| search OrigJobError=* OR OrigJobTables=* OR OrigStartType=* OR OrigSuccessType=* OR jobEndTime=* OR NewJobType=*
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigStartType,OrigTablesType,OrigErrorType,OrigSuccessType)
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","CM",OrigJobType="PgdCollections","PC",true(),"other")
+| eval OrigRowStatus=case(isnotnull(OrigSuccessType),"[any]Success",isnotnull(OrigJobTables),if(isnotnull(OrigJobHasError),"[orig]TablesDoneTokenErr",
+    "[orig]TablesDone"),isnotnull(OrigJobHasError),"[any]QueryError",isnotnull(OrigStartType),"[any]Started")
+| eval NewRowStatus=if(isnotnull(NewJobType),"[new]Started",if(isnotnull(jobEndTime),if(jobNumErrors>0,"[new]Error","[new]Success"),null()))
+| eval LogDate=strftime(_time, "%F %H")
+| regex OrigJobTypeShort!="MCA"
+| transaction ProcessId maxspan=8h
+| eval OrigRowStatusMV=case(isnotnull(OrigSuccessType),"[any]Success",isnotnull(OrigJobHasError),if(isnotnull(OrigJobTables),"[orig]TokensErr",
+    "[orig]QueryError"),isnotnull(OrigStartType),"[any]Started")
+| eval NewRowStatusMV=if(isnotnull(jobEndTime),if(jobNumErrors>0,"[new]Error","[new]Success"),null())
+| eval AnyStatus=coalesce(NewRowStatusMV,OrigRowStatusMV)
+| timechart last(AnyStatus) by 
+| table eventcount duration _time host tivodate ProcessId AnyStatus jobEndTime jobNumErrors JobStatus NewRowStatusMV OrigRowStatusMV NewRowStatus OrigRowStatus
+| sort -_time
+
+* good, get new/old status for every SJ, ST job
+
+index=database sourcetype=create_derived_table 
+| rex field=_raw ": Start (?<OrigStartType>\S+)$"
+| rex field=_raw ": End (?<OrigSuccessType>\S+)\. Took (?<OrigJobDuration>\d+) seconds"
+| rex field=_raw ": Done replacing \( (?<OrigJobTables>.*) \) tables in (?<OrigTablesDuration>\d+) sec"
+| rex field=_raw "(?<OrigJobHasError>errorcode)(?<OrigJobError>.*)"
+| rex field=_raw "jobName=(?<NewStartJob>\S+) .* Start Job"
+| rex field=_raw "\S+ \d+ \d+:\d+:\d+ \d+ (?<ProcessId>\d+):"
+| rex field=OrigJobError "DerivedTableErrors,(?<OrigJobErrorNum>\d+).*perl module '(?<OrigErrorType>\S+)':"
+| search OrigJobError=* OR OrigJobTables=* OR OrigStartType=* OR OrigSuccessType=* OR jobEndTime=* OR NewStartJob=*
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval OrigTablesType=case(OrigJobTables="mixContentAttributes","MixContentAttributes",OrigJobTables="currentMix","CurrentMix",match(OrigJobTables,"pgdColl"),"PgdCollections")
+| eval OrigJobType=coalesce(OrigStartType,OrigTablesType,OrigErrorType,OrigSuccessType)
+| eval OrigJobTypeShort=case(OrigJobType="MixContentAttributes","MCA",OrigJobType="CurrentMix","cm",OrigJobType="PgdCollections","pc",true(),"other")
+| eval OrigRowStatus=case(isnotnull(OrigSuccessType),"[any]Success",isnotnull(OrigJobTables),if(isnotnull(OrigJobHasError),"[orig]TablesDoneTokenErr",
+    "[orig]TablesDone"),isnotnull(OrigJobHasError),"[any]QueryError",isnotnull(OrigStartType),"[any]Started")
+| eval NewRowStatus=if(isnotnull(NewStartJob),"[new]Started",if(isnotnull(jobEndTime),if(jobNumErrors>0,"[new]Error","[new]Success"),null()))
+| regex OrigJobTypeShort!="MCA"
+| transaction ProcessId maxspan=8h
+| eval LogDate=strftime(_time, "%F %T")
+| eval AnyJobType=if(mvcount(NewStartJob)>0,jobName,OrigJobType)
+| eval OrigRowStatusMV=case(isnotnull(OrigSuccessType),"[any]Success",isnotnull(OrigJobHasError),if(isnotnull(OrigJobTables),"[orig]TokensErr",
+    "[orig]QueryError"),isnotnull(OrigStartType),"[any]Started")
+| eval NewRowStatusMV=if(isnotnull(jobEndTime),if(jobNumErrors>0,"[new]Error","[new]Success"),null())
+| eval AnyStatus=coalesce(NewRowStatusMV,OrigRowStatusMV)
+| sort -_time
+| stats first(AnyStatus) by LogDate host AnyJobType
+
+

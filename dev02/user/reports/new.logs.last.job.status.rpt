@@ -1,0 +1,18 @@
+viz: column chart
+format: unstacked, multi-series mode, show data values
+trellis: Yes, split by Env, shared scale
+
+
+index=database sourcetype=create_derived_table  jobEndTime
+| rename jobTotRunTimeSecs as jobRunTime
+| rename jobTotWaitSecs as jobWaitTime
+| rename jobDuration as jobTotDuration
+| rename jobState as jobStatus
+| rex field=source "-(?<tivodate>\d+)\.log"
+| eval Env=case(match(host,".*\.st"),"US_Stag",match(host,".*\.sj"),"US_Prod",true(),"ENV?") 
+| eval JobType=case(jobName="pc","PgdCollections",jobName="cm","CurrentMix")
+| eval jobEnv=printf("%s.%s", Env, JobType)
+| eval jobId=printf("%s.%d.%s",jobName,tivodate,substr(jobStartTime,10,2))
+| eval jobRunTime=if(jobNumErrors>0,-jobRunTime,jobRunTime)
+| sort -tivodate
+| stats first(jobRunTime) as LastJobStatusNegIfFailed by Env, JobType

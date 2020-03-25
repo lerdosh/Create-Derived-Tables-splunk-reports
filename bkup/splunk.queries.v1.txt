@@ -1,0 +1,7 @@
+| makeresults | eval _time=relative_time(now(),"-10d@d"), message="Event 1", type="type1" 
+ | append [| makeresults | eval _time=relative_time(now(),"-25d@d"), message="Event 2", type="type1"] 
+ | append [| makeresults | eval _time=relative_time(now(),"-10d@d"), message="Event 3", type="type1"]
+ | append [| makeresults | eval _time=relative_time(now(),"-5d@d"), message="Event 4", type="type1"]
+ | eval annotation_label = message
+
+ 
